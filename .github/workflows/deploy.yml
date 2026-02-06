@@ -1,0 +1,91 @@
+name: Build and Deploy to AWS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+  BACKEND_REPO: countries-backend
+  FRONTEND_REPO: countries-frontend
+  BACKEND_APP_RUNNER_ARN: arn:aws:apprunner:us-east-1:408337719856:service/countries-backend/3ed09f724c694d6384cfb32560f3f2e5
+
+jobs:
+  build-backend:
+    name: Build & Deploy Backend
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push backend image
+        run: |
+          docker build -t ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:latest \
+                       -t ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ github.sha }} \
+                       -f my-go-backend/Dockerfile .
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:latest
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.BACKEND_REPO }}:${{ github.sha }}
+
+      - name: Deploy to App Runner
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          aws apprunner start-deployment \
+            --service-arn ${{ env.BACKEND_APP_RUNNER_ARN }}
+
+  # ====================
+  # FRONTEND BUILD & DEPLOY
+  # ====================
+  build-frontend:
+    name: Build & Deploy Frontend
+    runs-on: ubuntu-latest
+    needs: build-backend
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push frontend image
+        run: |
+          docker build -t ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:latest \
+                       -t ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ github.sha }} \
+                       -f my-ui-project/Dockerfile .
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:latest
+          docker push ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPO }}:${{ github.sha }}
+
+      - name: Get Frontend App Runner ARN
+        id: get-frontend-arn
+        run: |
+          ARN=$(aws apprunner list-services --query "ServiceSummaryList[?ServiceName=='countries-frontend'].ServiceArn" --output text)
+          echo "arn=$ARN" >> $GITHUB_OUTPUT
+
+      - name: Deploy to App Runner
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          aws apprunner start-deployment \
+            --service-arn ${{ steps.get-frontend-arn.outputs.arn }}
