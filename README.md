@@ -34,15 +34,15 @@
 ## 📸 Screenshots
 
 <p align="center">
-  <img src="docs/images/screenshot-name.png" alt="Search by Name" width="80%"/>
+  <img src="images/image copy.png" alt="Search by Name" width="80%"/>
 </p>
 
 <p align="center">
-  <img src="docs/images/screenshot-capital.png" alt="Search by Capital" width="80%"/>
+  <img src="images/image copy 3.png" alt="Search by Capital" width="80%"/>
 </p>
 
 <p align="center">
-  <img src="docs/images/screenshot-language.png" alt="Search by Language" width="80%"/>
+  <img src="images/image.png" alt="Search by Language" width="80%"/>
 </p>
 
 ---
